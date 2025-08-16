@@ -2,187 +2,239 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Flashcards</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flashcards 🌸</title>
   <style>
-    body { font-family: Arial, sans-serif; text-align: center; margin: 50px; }
-    .card { 
-      border: 2px solid #333; 
-      border-radius: 10px; 
-      padding: 40px; 
-      font-size: 24px; 
-      width: 300px; 
-      margin: 0 auto 20px;
-      min-height: 80px;
+    body {
+      font-family: 'Arial', sans-serif;
+      background: #fff0f5;
+      text-align: center;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      color: #d63384;
+    }
+
+    select, input, button {
+      margin: 8px;
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid #d63384;
+      font-size: 16px;
+    }
+
+    button {
+      background-color: #ffb6c1;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+
+    button:hover {
+      background-color: #ff99aa;
+    }
+
+    .card {
+      background-color: #ffe4ec;
+      width: 300px;
+      height: 180px;
+      margin: 30px auto;
       display: flex;
       align-items: center;
       justify-content: center;
+      border-radius: 20px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+      font-size: 22px;
+      position: relative;
     }
-    button { 
-      margin: 5px; 
-      padding: 10px 20px; 
-      font-size: 18px; 
-      border-radius: 8px;
-      cursor: pointer;
+
+    .card::before {
+      content: "🌸";
+      position: absolute;
+      top: 10px;
+      left: 10px;
     }
-    .input-area, .search-area {
-      margin: 20px auto;
-      display: flex;
-      justify-content: center;
-      gap: 10px;
+
+    .card::after {
+      content: "🌸";
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
     }
-    input {
-      padding: 8px;
-      font-size: 16px;
-      border-radius: 6px;
-      border: 1px solid #333;
-    }
-    .archive-list {
-      margin: 20px auto;
-      max-width: 400px;
-      text-align: left;
-    }
-    .archive-item {
-      border-bottom: 1px solid #ccc;
-      padding: 5px 0;
+
+    #controls {
+      margin-top: 20px;
     }
   </style>
 </head>
 <body>
-  <h1>Flashcards</h1>
+  <h1>Flashcards 🌸</h1>
 
-  <div class="input-area">
-    <input type="text" id="frontInput" placeholder="Front (Dutch)">
-    <input type="text" id="backInput" placeholder="Back (English)">
-    <button onclick="addCard()">Add Card ➕</button>
+  <label for="language">Choose language:</label>
+  <select id="language"></select>
+  <button onclick="addNewLanguage()">➕ Yeni Dil Ekle</button>
+
+  <div>
+    <input id="frontInput" placeholder="Word (Target Language)" />
+    <input id="backInput" placeholder="Meaning (Your Language)" />
+    <button onclick="addCard()">Add Card</button>
   </div>
 
-  <div class="search-area">
-    <input type="text" id="searchInput" placeholder="Search in archive">
-    <button onclick="searchCard()">Search 🔍</button>
+  <div class="card" id="flashcard">No cards yet</div>
+
+  <div id="controls">
+    <button onclick="flipCard()">Flip</button>
+    <button onclick="markKnown()">I knew it ✅</button>
+    <button onclick="markUnknown()">I didn’t know ❌</button>
+    <button onclick="nextCard()">Next</button>
   </div>
-
-  <div class="card" id="card">Press Next to Start</div>
-  <button onclick="showAnswer()">Show Answer</button>
-  <button onclick="markKnown()">I knew it ✅ (Archive)</button>
-  <button onclick="markUnknown()">I didn’t know ❌</button>
-  <button onclick="nextCard()">Next ➡️</button>
-
-  <h2>Archived Cards</h2>
-  <div class="archive-list" id="archiveList"></div>
 
   <script>
     const SERVER_URL = 'https://api.jsonbin.io/v3/b/68a05611ae596e708fcb51be';
     const API_KEY = '$2a$10$QnQBLYpOeCkluH1MyFK9ZePET40jwE7DvemhNng3MMqic4PBKVYYy';
 
-    let cards = [];
-    let archive = [];
-    let currentCard = null;
-    let knownPile = [];
-    let cycleCounter = 0;
+    let data = {};
+    let currentLanguage = "";
+    let currentIndex = 0;
+    let showingFront = true;
+
+    const flashcardDiv = document.getElementById("flashcard");
+    const languageSelect = document.getElementById("language");
+
+    languageSelect.addEventListener("change", () => {
+      currentLanguage = languageSelect.value;
+      ensureLanguageExists();
+      currentIndex = 0;
+      showingFront = true;
+      showCard();
+    });
 
     async function fetchData() {
       try {
-        const res = await fetch(SERVER_URL, {headers: { 'X-Master-Key': API_KEY }});
-        const data = await res.json();
-        cards = data.record.flashcards || [];
-        archive = data.record.archived || [];
-        updateArchiveList();
+        const res = await fetch(SERVER_URL, {
+          headers: { "X-Master-Key": API_KEY }
+        });
+        const json = await res.json();
+        if (json.record) data = json.record;
+
+        // varsa dilleri dropdown’a doldur
+        languageSelect.innerHTML = "";
+        Object.keys(data).forEach(lang => {
+          const option = document.createElement("option");
+          option.value = lang;
+          option.textContent = lang;
+          languageSelect.appendChild(option);
+        });
+
+        // hiç dil yoksa başlangıç için "Default" ekle
+        if (Object.keys(data).length === 0) {
+          addLanguage("Default");
+        }
+
+        currentLanguage = languageSelect.value;
+        ensureLanguageExists();
+        showCard();
       } catch (e) {
-        console.error('Error fetching data', e);
+        console.error("Error fetching data:", e);
       }
     }
 
     async function saveData() {
       try {
         await fetch(SERVER_URL, {
-          method: 'PUT',
+          method: "PUT",
           headers: {
-            'Content-Type': 'application/json',
-            'X-Master-Key': API_KEY
+            "Content-Type": "application/json",
+            "X-Master-Key": API_KEY
           },
-          body: JSON.stringify({flashcards: cards.concat(knownPile), archived: archive})
+          body: JSON.stringify(data)
         });
-        updateArchiveList();
       } catch (e) {
-        console.error('Error saving data', e);
+        console.error("Error saving data:", e);
       }
     }
 
-    function updateArchiveList() {
-      const listDiv = document.getElementById("archiveList");
-      listDiv.innerHTML = '';
-      archive.forEach(c => {
-        const div = document.createElement('div');
-        div.className = 'archive-item';
-        div.innerText = c.front + ' → ' + c.back;
-        listDiv.appendChild(div);
-      });
+    function ensureLanguageExists() {
+      if (!data[currentLanguage]) {
+        data[currentLanguage] = { flashcards: [], archived: [] };
+        saveData();
+      }
     }
 
-    function nextCard() {
-      cycleCounter++;
-      if (cycleCounter % 3 === 0 && knownPile.length > 0) {
-        cards = cards.concat(knownPile);
-        knownPile = [];
-      }
+    function addLanguage(lang) {
+      if (!lang || data[lang]) return;
+      data[lang] = { flashcards: [], archived: [] };
 
-      if (cards.length === 0) {
-        document.getElementById("card").innerText = "You finished all cards 🎉";
-        return;
-      }
+      const option = document.createElement("option");
+      option.value = lang;
+      option.textContent = lang;
+      languageSelect.appendChild(option);
 
-      const randomIndex = Math.floor(Math.random() * cards.length);
-      currentCard = cards[randomIndex];
-      document.getElementById("card").innerText = currentCard.front;
+      languageSelect.value = lang;
+      currentLanguage = lang;
       saveData();
     }
 
-    function showAnswer() {
-      if (currentCard) document.getElementById("card").innerText = currentCard.back;
-    }
-
-    function markKnown() {
-      if (currentCard) {
-        archive.push(currentCard);
-        cards = cards.filter(c => c !== currentCard);
-        saveData();
-        nextCard();
-      }
-    }
-
-    function markUnknown() {
-      if (currentCard) {
-        saveData();
-        nextCard();
+    function addNewLanguage() {
+      const lang = prompt("Yeni dil adı girin (ör: German):");
+      if (lang) {
+        addLanguage(lang.trim());
+        showCard();
       }
     }
 
     function addCard() {
-      const frontValue = document.getElementById("frontInput").value.trim();
-      const backValue = document.getElementById("backInput").value.trim();
-      if (frontValue && backValue) {
-        cards.push({front: frontValue, back: backValue});
-        document.getElementById("frontInput").value = '';
-        document.getElementById("backInput").value = '';
-        saveData();
-        alert("New card added!");
-      } else {
-        alert("Please enter both front and back values.");
-      }
+      const front = document.getElementById("frontInput").value.trim();
+      const back = document.getElementById("backInput").value.trim();
+      if (!front || !back) return;
+      ensureLanguageExists();
+      data[currentLanguage].flashcards.push({ front, back });
+      saveData();
+      document.getElementById("frontInput").value = "";
+      document.getElementById("backInput").value = "";
+      showCard();
     }
 
-    function searchCard() {
-      const query = document.getElementById("searchInput").value.trim().toLowerCase();
-      if (!query) {
-        alert("Please enter a word to search.");
+    function showCard() {
+      ensureLanguageExists();
+      const cards = data[currentLanguage].flashcards;
+      if (cards.length === 0) {
+        flashcardDiv.textContent = "No cards yet";
         return;
       }
-      const result = archive.find(c => c.front.toLowerCase() === query || c.back.toLowerCase() === query);
-      if (result) {
-        document.getElementById("card").innerText = result.front + " → " + result.back;
-      } else {
-        alert("Card not found in archive.");
-      }
+      if (currentIndex >= cards.length) currentIndex = 0;
+      flashcardDiv.textContent = showingFront ? cards[currentIndex].front : cards[currentIndex].back;
+    }
+
+    function flipCard() {
+      const cards = data[currentLanguage].flashcards;
+      if (cards.length === 0) return;
+      showingFront = !showingFront;
+      showCard();
+    }
+
+    function markKnown() {
+      const cards = data[currentLanguage].flashcards;
+      if (cards.length === 0) return;
+      const card = cards.splice(currentIndex, 1)[0];
+      data[currentLanguage].archived.push(card);
+      saveData();
+      showingFront = true;
+      showCard();
+    }
+
+    function markUnknown() {
+      showingFront = true;
+      nextCard();
+    }
+
+    function nextCard() {
+      const cards = data[currentLanguage].flashcards;
+      if (cards.length === 0) return;
+      currentIndex = (currentIndex + 1) % cards.length;
+      showingFront = true;
+      showCard();
     }
 
     fetchData();
